@@ -13,7 +13,7 @@
  # so that they can be executed by calling the program name.
 
 
-
+#TODO - redo all of this with conda environment
 #Trinity Program (v2.6.6) - De-novo assembly program
 export PATH=/programs/trinityrnaseq-Trinity-v2.6.6:$PATH
 #Bowtie2 Program (v2.3.0) - Short read aligner
@@ -49,6 +49,8 @@ export PATH=/programs/snippy/bin:/programs/snippy/binaries/linux/:$PATH
 export PATH=/programs/seqtk:$PATH
 export PATH=/programs/samclip:$PATH
 export PATH=/programs/vt:$PATH
+export PATH=/programs/minimap2-2.15:$PATH
+export PATH=/programs/snp-sites-2.4.0/bin:$PATH
 
 
 
@@ -56,17 +58,20 @@ export PATH=/programs/vt:$PATH
 echo
 echo =========================================================================
 echo Script for Canine Influenza Reference-based genome assembly and analysis
-echo Author: Derek Rothenheber
+echo Author: Derek Rothenheber and Patrick Mitchell
 echo Affliation: Cornell University - Animal Health and Diagnostic Center
-echo email: dr575@cornell.edu
-echo github: @drothen15/canine_influenza
+echo email: pkm57@cornell.edu
+echo github: @pkmitchell/canine_influenza
 echo =========================================================================
 echo
-sleep 5s
+
 
 
 echo -n 'enter fasta reference genome PATH: '
 read reffasta
+
+echo -n 'enter number of cores to use: '
+read ncpus
 
 
 ## Step 1 Initial FastQC on foward and reverse reads
@@ -79,21 +84,19 @@ echo
 rm -r -f fastqc/
 mkdir fastqc
 
-unpigz *R1* | unpigz *R2*
-cat *R1* > fastqc/cat-r1.fastq | cat *R2* > fastqc/cat-r2.fastq
-pigz *R1* | pigz *R2*
 
-fastqc fastqc/cat-r1.fastq -o fastqc/ -t 40 --nogroup
-fastqc fastqc/cat-r2.fastq -o fastqc/ -t 40 --nogroup
+
+fastqc *R1_001.fastq.gz -o fastqc/ -t $ncpus --nogroup
+fastqc *R2_001.fastq.gz -o fastqc/ -t $ncpus --nogroup
 
 
 ## awk command retriving read length distribution - in the future an R script will plot the results (two column data structure)
-cd fastqc/
-awk 'NR%4 == 2 {lengths[length($0)]++ ; counter++} END {for (l in lengths) {print l, lengths[l]}; print "total reads: " counter}' cat-r1.fastq > readlength-r1.csv
-awk 'NR%4 == 2 {lengths[length($0)]++ ; counter++} END {for (l in lengths) {print l, lengths[l]}; print "total reads: " counter}' cat-r2.fastq > readlength-r2.csv
-sort -t, -nk1 readlength-r1.csv > sorted.readlength-r1.csv
-sort -t, -nk1 readlength-r2.csv > sorted.readlength-r2.csv
-cd ..
+#cd fastqc/
+#awk 'NR%4 == 2 {lengths[length($0)]++ ; counter++} END {for (l in lengths) {print l, lengths[l]}; print "total reads: " counter}' cat-r1.fastq > readlength-r1.csv
+#awk 'NR%4 == 2 {lengths[length($0)]++ ; counter++} END {for (l in lengths) {print l, lengths[l]}; print "total reads: " counter}' cat-r2.fastq > readlength-r2.csv
+#sort -t, -nk1 readlength-r1.csv > sorted.readlength-r1.csv
+#sort -t, -nk1 readlength-r2.csv > sorted.readlength-r2.csv
+#cd ..
 
 
 ## Step 2 Error Correction with Lighter
@@ -112,7 +115,7 @@ for R1 in *R1*
 do
    R2=${R1//R1_001.fastq/R2_001.fastq}
 #   echo $R1 $R2
-   echo "/programs/Lighter/lighter -r $R1 -r $R2 -t 40 -k 25 13000 .1 -od lighter-output/" >> lighter.cmds
+   echo "/programs/Lighter/lighter -r $R1 -r $R2 -t $ncpus -k 25 13000 .1 -od lighter-output/" >> lighter.cmds
 done
 
 cat lighter.cmds
@@ -167,16 +170,9 @@ cd fastqc/
 mkdir post-qc
 cd ../trimmomatic-output
 
-unpigz *R1* | unpigz *R2*
-cat *R1_001.cor.paired* > ../fastqc/post-qc/postqc-cat-r1.fastq | cat *R2_001.cor.paired* > ../fastqc/post-qc/postqc-cat-r2.fastq
-#pigz *R1* | pigz *R2*
 
-cd ..
-
-fastqc fastqc/post-qc/postqc-cat-r1.fastq -o fastqc/post-qc/ -t 40 --nogroup
-fastqc fastqc/post-qc/postqc-cat-r2.fastq -o fastqc/post-qc/ -t 40 --nogroup
-
-
+fastqc *R1_001.cor.paired* -o ../fastqc/post-qc/ -t $ncpus --nogroup
+fastqc *R2_001.cor.paired* -o ../fastqc/post-qc/ -t $ncpus --nogroup
 
 ## Step 5: Reference-based Assembly with Bowtie2 Package (SAM/BAM file formating)
 
@@ -196,27 +192,29 @@ do
    R2=${file//R1_001.cor.paired.fq/R2_001.cor.paired.fq}
    out=${file//L001_R1_001.cor.paired.fq/output}
    pre=${file//L001_R1_001.cor.paired.fq/snps}
-   echo "snippy --outdir $out --R1 $R1 --R2 $R2 --reference $reffasta --mapqual 25 --prefix $pre --cpus 35 --ram 100" >> snippy.cmds
+   stem=$(echo $file|cut -d "_" -f 1)
+   echo "$stem	$R1	$R2" >> snippy_input.tab
 done
 
+snippy-multi snippy_input.tab --ref $reffasta --cpus $ncpus >snippy.cmds
 
-cat snippy.cmds
 chmod u+x snippy.cmds
-./snippy.cmds
+./snippy.cmds &>snippy.cmds.log
 
 
-rm -r -f consensus-fasta
-mkdir consensus-fasta
+
+#rm -r -f consensus-fasta
+#mkdir consensus-fasta
 
 
-for file in *output/*consensus.fa
-do
-   echo "cp $file consensus-fasta/" >> copy.cmds
-done
+#for file in *output/*.full.aln
+#do
+#   echo "cp $file consensus-fasta/" >> copy.cmds
+#done
 
-cat copy.cmds
-chmod u+x copy.cmds
-./copy.cmds
+#cat copy.cmds
+#chmod u+x copy.cmds
+#./copy.cmds
 
 
 
@@ -229,24 +227,24 @@ echo ---------------------------------------------------------------------------
 echo
 ######################################################################
 
-cd consensus-fasta
+#cd consensus-fasta
 
-mkdir final_consensus_fasta
+#mkdir final_consensus_fasta
 
-quote="'"
+#quote="'"
 
-for file in *.fa
-do
-  output=${file//consensus.fa/consensus_FINAL.fa}
-  echo awk $quote '/>/{sub(">","&"FILENAME" reference:");sub(/\.fa/,x)}1' $quote  $file ">" $output >> rename.cmds
-done
+#for file in *.fa
+#do
+#  output=${file//consensus.fa/consensus_FINAL.fa}
+#  echo awk $quote '/>/{sub(">","&"FILENAME" reference:");sub(/\.fa/,x)}1' $quote  $file ">" $output >> rename.cmds
+#done
 
-cat rename.cmds
-chmod u+x rename.cmds
-./rename.cmds
+#cat rename.cmds
+#chmod u+x rename.cmds
+#./rename.cmds
 
 
-mv *FINAL* final_consensus_fasta
+#mv *FINAL* final_consensus_fasta
 
 
 
