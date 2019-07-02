@@ -1,6 +1,6 @@
 # Assembly and Annotation Pipelines for Canine Influenza A - Vet Molecular Diagnostics  
 This repo contains shell and python scripts used to assemble raw fastq sequencing files into full concatenated genomes.
-All of these scripts are optimized to run in Cornell's HPC environment, but can easily be transfered to other HPCs or AWS.
+All of these scripts are optimized to run in Cornell's HPC environment, but can easily be transfered to other HPCs or AWS. Evenutally there will be a conda package list rather than hard coding the PATH setting.
 
 The following scripts are including in this repo:
 1. influenza_analysis.sh (De-novo assembly with Kraken binning and Trinity Assembly)
@@ -11,7 +11,7 @@ The following scripts are including in this repo:
 
 
 # Reference-based Assembly Pipelines
-I tend to use these pipelines more often than De-novo because they don't require as much sequencing depth to obtain complete and full genomes
+I tend to use these pipelines more often than De-novo because they don't require as much sequencing depth to obtain complete and full genomes. However, it is critical that you choose a good reference, particularly for the H and N segments.
 
 1. Running Pipeline
 ```bash
@@ -28,6 +28,7 @@ There is no limit to the number of samples run at a time, the script scales to n
 2. User Provided Positional Arguments 
 ```bash
 enter fasta genome PATH: <$PATH to reference fasta file>
+enter number of threads to use: <int number of threads to use>
 ```
 
 3. Output files
@@ -40,6 +41,6 @@ trimmomatic-output/  - Error corrected and trimmed reads
 
 trimmomatic-output/Sample_output/  - Snippy output files, contains vcf, bam, etc.
 
-trimmomatic-output/consensus-fasta/final_consensus_fasta/  - Final fasta file containing called SNPs instantiated
+trimmomatic-output/core.full.aln  - Final fasta file containing called SNPs and low/no coverage sites
 ```
 
