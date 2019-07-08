@@ -182,10 +182,6 @@ echo Step 5 Reference-based Assembly with Snippy!!
 echo ------------------------------------------------------------------------------------
 echo
 
-
-
-cd trimmomatic-output/
-
 for file in *R1_001.cor.paired*
 do
    R1=$file
